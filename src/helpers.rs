@@ -1,6 +1,9 @@
-use crate::world::bindings::wasi::http::types::{Fields, OutgoingBody, OutgoingResponse, IncomingRequest};
+use crate::world::bindings::wasi::http::types::{
+    Fields, IncomingRequest, OutgoingBody, OutgoingResponse,
+};
 
 use crate::world::bindings::exports::wasi::http::incoming_handler::ResponseOutparam;
+use crate::world::bindings::wasi::io::streams::StreamError;
 use std::collections::HashMap;
 
 pub struct ResponseBuilder {
@@ -49,9 +52,7 @@ impl ResponseBuilder {
         ResponseOutparam::set(resp, Ok(resp_tx));
         let stream = body.write().unwrap();
         if let Some(body_content) = self.body_content {
-            stream
-                .blocking_write_and_flush(body_content.as_bytes())
-                .unwrap();
+            stream.write(body_content.as_bytes()).unwrap();
         }
         drop(stream);
         let _ = OutgoingBody::finish(body, None);
@@ -74,7 +75,19 @@ pub fn parse_headers(headers: &Fields) -> HashMap<String, Vec<String>> {
 
 pub fn parse_body(req: IncomingRequest) -> Result<Vec<u8>, String> {
     let mut request_body = Vec::new();
-    let stream = req.consume().unwrap().stream().unwrap();
+    let stream = match req.consume() {
+        Ok(stream) => stream,
+        Err(e) => {
+            return Err(format!("Failed to consume request stream"));
+        }
+    };
+    let stream = match stream.stream() {
+        Ok(stream) => stream,
+        Err(e) => {
+            return Err(format!("Failed to get request stream: "));
+        }
+    };
+
     loop {
         match stream.read(4096) {
             Ok(chunk) => {
@@ -82,6 +95,10 @@ pub fn parse_body(req: IncomingRequest) -> Result<Vec<u8>, String> {
                     break;
                 }
                 request_body.extend_from_slice(&chunk);
+            }
+            Err(StreamError::Closed) => {
+                // Stream is closed, we can stop reading
+                break;
             }
             Err(e) => {
                 return Err(format!("Failed to read from request stream: {e}"));
