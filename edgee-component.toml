@@ -1,0 +1,22 @@
+manifest-version = 1
+
+[component]
+name = "example-rust-edge-function-component"
+version = "1.0.0"
+
+category = "edge-function"
+subcategory = "wasm-function"
+description = "Example Rust component for edge function"
+documentation = "https://github.com/edgee-cloud/example-rust-component"
+repository = "https://github.com/edgee-cloud/example-rust-component"
+language = "Rust"
+wit-version = "1.0.0"
+
+[component.build]
+command = "cargo build --target wasm32-wasip2 --target-dir ./target && mv ./target/wasm32-wasip2/debug/example_rust_edge_function_component.wasm ./component.wasm"
+output_path = "component.wasm"
+
+[component.settings.webhook_url]
+title = "Slack Webhook URL"
+type = "string"
+required = true
