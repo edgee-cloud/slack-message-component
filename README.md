@@ -28,7 +28,7 @@ then you invoke it from your frontend code.
 3. Add the following configuration to your `edgee.toml`:
 
 ```toml
-[[destinations.data_collection]]
+[[components.edge_functions]]
 id = "slack-message"
 file = "/var/edgee/components/slack.wasm"
 settings.edgee_path = "/slack-message"
