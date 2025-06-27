@@ -1,20 +1,21 @@
 manifest-version = 1
 
 [component]
-name = "example-rust-edge-function-component"
+name = "Slack Message"
 version = "1.0.0"
 
 category = "edge-function"
 subcategory = "wasm-function"
-description = "Example Rust component for edge function"
-documentation = "https://github.com/edgee-cloud/example-rust-component"
-repository = "https://github.com/edgee-cloud/example-rust-component"
+description = "Edge function component to send Slack messages."
+documentation = "https://github.com/edgee-cloud/slack-message-component"
+repository = "https://github.com/edgee-cloud/slack-message-component"
 language = "Rust"
 wit-version = "1.0.0"
+icon-path = "slack.png"
 
 [component.build]
-command = "cargo build --target wasm32-wasip2 --target-dir ./target && mv ./target/wasm32-wasip2/debug/example_rust_edge_function_component.wasm ./component.wasm"
-output_path = "component.wasm"
+command = "cargo build --target wasm32-wasip2 --target-dir ./target && mv ./target/wasm32-wasip2/debug/slack_message_component.wasm ./slack.wasm"
+output_path = "slack.wasm"
 
 [component.settings.webhook_url]
 title = "Slack Webhook URL"
