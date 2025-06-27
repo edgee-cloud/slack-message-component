@@ -46,7 +46,7 @@ impl Guest for Component {
 
         // extract message from request body
         let message = match body_json.get("message") {
-            Some(msg) => msg.to_string(),
+            Some(value) => value.as_str().unwrap_or("").to_string(), // this removes quotes and converts to String
             None => {
                 let response = helpers::build_response_json_error(
                     "Missing 'message' field in request body",
