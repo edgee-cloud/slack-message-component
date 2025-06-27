@@ -8,15 +8,17 @@ use world::bindings::wasi::http::types::IncomingRequest;
 use world::bindings::wasi::http::types::ResponseOutparam;
 use world::bindings::Component;
 
-
 impl Guest for Component {
     fn handle(req: IncomingRequest, resp: ResponseOutparam) {
-
         // check if settings are valid
         let settings = match Settings::from_req(&req) {
             Ok(settings) => settings,
             Err(_) => {
-                helpers::error_response("Failed to parse component settings, missing Slack webhook URL", 500, resp);
+                helpers::error_response(
+                    "Failed to parse component settings, missing Slack webhook URL",
+                    500,
+                    resp,
+                );
                 return;
             }
         };
@@ -25,7 +27,7 @@ impl Guest for Component {
         let request_body = match helpers::parse_body(req) {
             Ok(body) => body,
             Err(e) => {
-                helpers::error_response(&e,400, resp);
+                helpers::error_response(&e, 400, resp);
                 return;
             }
         };
@@ -39,7 +41,7 @@ impl Guest for Component {
             }
         };
 
-        // extract the message from the request body
+        // extract message from request body
         let message = match body_json.get("message") {
             Some(msg) => msg.to_string(),
             None => {
@@ -48,31 +50,31 @@ impl Guest for Component {
             }
         };
 
-        // send 
+        // build Slack API payload for simple text message
+        let slack_message_payload = SlackMessagePayload {
+            text: message.clone(),
+        };
+
+        // send message to Slack
         let slack_response = waki::Client::new()
             .post(&settings.webhook_url)
             .header("Content-Type", "application/json")
-            .body(format!("{{\"text\": \"{message}\"}}"))
+            .body(serde_json::to_vec(&slack_message_payload).unwrap())
             .send()
             .unwrap();
 
         let response_status = slack_response.status_code();
-        let response_body = String::from_utf8_lossy(&slack_response.body().unwrap_or_default()).to_string();
-        
-        let mut builder = helpers::ResponseBuilder::new();
-        builder
-            .set_header("content-type", "application/json")
-            .set_status_code(response_status)
-            .set_body(&response_body);
+        let response_body =
+            String::from_utf8_lossy(&slack_response.body().unwrap_or_default()).to_string();
 
-        builder.build(resp);
+        helpers::send_response(&response_body, response_status, resp);
     }
-
-
-
 }
 
-
+#[derive(serde::Deserialize, serde::Serialize)]
+struct SlackMessagePayload {
+    text: String,
+}
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct Settings {
