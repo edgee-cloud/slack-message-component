@@ -35,6 +35,21 @@ settings.edgee_path = "/slack-message"
 settings.webhook_url = "https://hooks.slack.com/services/XYZ"
 ```
 
+### How to use the HTTP endpoint
+
+You can send requests to the endpoint as follows:
+
+```javascript
+
+await fetch('/slack-message', {
+  method: 'POST',
+  body: JSON.stringify({
+    "message": "hello world!",
+  })
+});
+
+```
+
 ## Development
 
 ### Building from Source
