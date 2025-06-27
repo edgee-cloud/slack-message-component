@@ -14,11 +14,11 @@ impl Guest for Component {
         let settings = match Settings::from_req(&req) {
             Ok(settings) => settings,
             Err(_) => {
-                helpers::error_response(
+                let response = helpers::build_response_json_error(
                     "Failed to parse component settings, missing Slack webhook URL",
                     500,
-                    resp,
                 );
+                response.send(resp);
                 return;
             }
         };
@@ -27,7 +27,8 @@ impl Guest for Component {
         let request_body = match helpers::parse_body(req) {
             Ok(body) => body,
             Err(e) => {
-                helpers::error_response(&e, 400, resp);
+                let response = helpers::build_response_json_error(&e, 400);
+                response.send(resp);
                 return;
             }
         };
@@ -36,7 +37,9 @@ impl Guest for Component {
         let body_json: serde_json::Value = match serde_json::from_slice(&request_body) {
             Ok(json) => json,
             Err(_) => {
-                helpers::error_response("Invalid JSON in request body", 400, resp);
+                let response =
+                    helpers::build_response_json_error("Invalid JSON in request body", 400);
+                response.send(resp);
                 return;
             }
         };
@@ -45,7 +48,11 @@ impl Guest for Component {
         let message = match body_json.get("message") {
             Some(msg) => msg.to_string(),
             None => {
-                helpers::error_response("Missing 'message' field in request body", 400, resp);
+                let response = helpers::build_response_json_error(
+                    "Missing 'message' field in request body",
+                    400,
+                );
+                response.send(resp);
                 return;
             }
         };
@@ -67,7 +74,8 @@ impl Guest for Component {
         let response_body =
             String::from_utf8_lossy(&slack_response.body().unwrap_or_default()).to_string();
 
-        helpers::send_response(&response_body, response_status, resp);
+        let response = helpers::build_response_json(&response_body, response_status);
+        response.send(resp);
     }
 }
 

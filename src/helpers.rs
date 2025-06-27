@@ -1,8 +1,7 @@
+use crate::world::bindings::exports::wasi::http::incoming_handler::ResponseOutparam;
 use crate::world::bindings::wasi::http::types::{
     Fields, IncomingRequest, OutgoingBody, OutgoingResponse,
 };
-
-use crate::world::bindings::exports::wasi::http::incoming_handler::ResponseOutparam;
 use crate::world::bindings::wasi::io::streams::StreamError;
 use std::collections::HashMap;
 
@@ -44,7 +43,7 @@ impl ResponseBuilder {
         self
     }
 
-    pub fn build(self, resp: ResponseOutparam) {
+    pub fn send(self, resp: ResponseOutparam) {
         let resp_tx = OutgoingResponse::new(self.headers);
         let _ = resp_tx.set_status_code(self.status_code);
 
@@ -108,15 +107,25 @@ pub fn parse_body(req: IncomingRequest) -> Result<Vec<u8>, String> {
     Ok(request_body)
 }
 
-pub fn error_response(msg: &str, status_code: u16, resp: ResponseOutparam) {
-    send_response(&format!("{{\"error\": \"{msg}\"}}"), status_code, resp);
-}
-
-pub fn send_response(body: &str, status_code: u16, resp: ResponseOutparam) {
+pub fn build_response(body: &str, status_code: u16, content_type: &str) -> ResponseBuilder {
     let mut builder = ResponseBuilder::new();
     builder
-        .set_header("content-type", "application/json")
+        .set_header("content-type", content_type)
         .set_status_code(status_code)
         .set_body(body);
-    builder.build(resp);
+    builder
+}
+
+#[allow(dead_code)]
+pub fn build_response_html(body: &str, status_code: u16) -> ResponseBuilder {
+    build_response(body, status_code, "text/html; charset=utf-8")
+}
+
+pub fn build_response_json(body: &str, status_code: u16) -> ResponseBuilder {
+    build_response(body, status_code, "application/json")
+}
+
+pub fn build_response_json_error(message: &str, status_code: u16) -> ResponseBuilder {
+    let body = format!("{{\"error\": \"{message}\"}}");
+    build_response_json(&body, status_code)
 }
