@@ -32,6 +32,7 @@ then you invoke it from your frontend code.
 id = "slack-message"
 file = "/var/edgee/components/slack.wasm"
 settings.edgee_path = "/slack-message"
+settings.webhook_url = "https://hooks.slack.com/services/XYZ"
 ```
 
 ## Development
