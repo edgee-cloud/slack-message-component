@@ -3,6 +3,7 @@ mod world;
 
 use std::collections::HashMap;
 
+use waki::Response;
 use world::bindings::exports::wasi::http::incoming_handler::Guest;
 use world::bindings::wasi::http::types::IncomingRequest;
 use world::bindings::wasi::http::types::ResponseOutparam;
@@ -57,19 +58,18 @@ impl Guest for Component {
             }
         };
 
-        // build Slack API payload for simple text message
-        let slack_message_payload = SlackMessagePayload {
-            text: message.clone(),
-        };
+        // build Slack API payload for simple text message and send it
+        let slack_message_payload = SlackMessagePayload::new(message.clone());
+        let slack_response = slack_message_payload.send(&settings.webhook_url);
 
-        // send message to Slack
-        let slack_response = waki::Client::new()
-            .post(&settings.webhook_url)
-            .header("Content-Type", "application/json")
-            .body(serde_json::to_vec(&slack_message_payload).unwrap())
-            .send()
-            .unwrap();
+        // handle error in case request couldn't be sent
+        if let Err(e) = slack_response {
+            let response = helpers::build_response_json_error(&e.to_string(), 500);
+            response.send(resp);
+            return;
+        }
 
+        let slack_response = slack_response.unwrap();
         let response_status = slack_response.status_code();
         let response_body =
             String::from_utf8_lossy(&slack_response.body().unwrap_or_default()).to_string();
@@ -84,7 +84,23 @@ struct SlackMessagePayload {
     text: String,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+impl SlackMessagePayload {
+    fn new(text: String) -> Self {
+        Self { text }
+    }
+
+    fn send(&self, webhook_url: &str) -> anyhow::Result<Response> {
+        let client = waki::Client::new();
+        let response = client
+            .post(webhook_url)
+            .header("Content-Type", "application/json")
+            .body(serde_json::to_vec(self)?)
+            .send()?;
+        Ok(response)
+    }
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug)]
 pub struct Settings {
     pub webhook_url: String,
 }
@@ -132,5 +148,69 @@ mod tests {
 
         let settings = Settings::new(&headers).unwrap();
         assert_eq!(settings.webhook_url, "test_value");
+    }
+
+    #[test]
+    fn test_settings_new_missing_header() {
+        let headers = HashMap::new();
+        let result = Settings::new(&headers);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Missing 'x-edgee-component-settings' header"
+        );
+    }
+
+    #[test]
+    fn test_settings_new_multiple_headers() {
+        let mut headers = HashMap::new();
+        headers.insert(
+            "x-edgee-component-settings".to_string(),
+            vec![
+                r#"{"webhook_url": "test_value"}"#.to_string(),
+                r#"{"webhook_url": "another_value"}"#.to_string(),
+            ],
+        );
+        let result = Settings::new(&headers);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Expected exactly one 'x-edgee-component-settings' header"));
+    }
+
+    #[test]
+    fn test_settings_new_invalid_json() {
+        let mut headers = HashMap::new();
+        headers.insert(
+            "x-edgee-component-settings".to_string(),
+            vec!["not a json".to_string()],
+        );
+        let result = Settings::new(&headers);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_settings_new_missing_webhook_url() {
+        let mut headers = HashMap::new();
+        headers.insert(
+            "x-edgee-component-settings".to_string(),
+            vec![r#"{"not_webhook_url": "value"}"#.to_string()],
+        );
+        let settings = Settings::new(&headers).unwrap();
+        assert_eq!(settings.webhook_url, "");
+    }
+
+    #[test]
+    fn test_slack_message_payload_new() {
+        let payload = SlackMessagePayload::new("Hello, Slack!".to_string());
+        assert_eq!(payload.text, "Hello, Slack!");
+    }
+
+    #[test]
+    fn test_slack_message_payload_serialize() {
+        let payload = SlackMessagePayload::new("Test message".to_string());
+        let json = serde_json::to_string(&payload).unwrap();
+        assert_eq!(json, r#"{"text":"Test message"}"#);
     }
 }
