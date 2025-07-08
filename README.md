@@ -31,9 +31,11 @@ then you invoke it from your frontend code.
 [[components.edge_functions]]
 id = "slack-message"
 file = "/var/edgee/components/slack.wasm"
-settings.edgee_path = "/slack-message"
 settings.webhook_url = "https://hooks.slack.com/services/XYZ"
+settings.edgee_path = "/slack-message"
+settings.edgee_path_prefix = "/slack-message"
 ```
+Note that either `edgee_path` or `edgee_path_prefix` must be set, but not both.
 
 ### How to use the HTTP endpoint
 
