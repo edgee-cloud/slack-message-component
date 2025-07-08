@@ -32,8 +32,8 @@ then you invoke it from your frontend code.
 id = "slack-message"
 file = "/var/edgee/components/slack.wasm"
 settings.webhook_url = "https://hooks.slack.com/services/XYZ"
-settings.edgee_path = "/slack-message"
-settings.edgee_path_prefix = "/slack-message"
+settings.edgee_path = "/path" # exact match
+settings.edgee_path_prefix = "/prefix" # will match /prefix/anything
 ```
 Note that either `edgee_path` or `edgee_path_prefix` must be set, but not both.
 
