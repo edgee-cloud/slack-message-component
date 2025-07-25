@@ -1,81 +1,56 @@
-mod helpers;
-mod world;
-
 use std::collections::HashMap;
 
+use bindings::wasi::http::types::{IncomingRequest, ResponseOutparam};
+
+#[cfg(not(test))]
 use waki::Response;
-use world::bindings::exports::wasi::http::incoming_handler::Guest;
-use world::bindings::wasi::http::types::IncomingRequest;
-use world::bindings::wasi::http::types::ResponseOutparam;
-use world::bindings::Component;
 
-impl Guest for Component {
+mod bindings {
+    wit_bindgen::generate!({
+        path: ".edgee/wit",
+        world: "edge-function",
+        generate_all,
+        pub_export_macro: true,
+        default_bindings_module: "$crate::bindings",
+    });
+}
+mod helpers;
+
+struct Component;
+bindings::export!(Component);
+
+impl bindings::exports::wasi::http::incoming_handler::Guest for Component {
     fn handle(req: IncomingRequest, resp: ResponseOutparam) {
-        // check if settings are valid
-        let settings = match Settings::from_req(&req) {
-            Ok(settings) => settings,
-            Err(_) => {
-                let response = helpers::build_response_json_error(
-                    "Failed to parse component settings, missing Slack webhook URL",
-                    500,
-                );
-                response.send(resp);
-                return;
-            }
+        helpers::run_json(req, resp, Self::handle_json_request);
+    }
+}
+
+impl Component {
+    fn handle_json_request(
+        req: http::Request<serde_json::Value>,
+    ) -> Result<http::Response<String>, anyhow::Error> {
+        let settings = Settings::from_req(&req)?;
+
+        // Extract message from request body
+        let request_body = req.body();
+        let message = match request_body.get("message") {
+            Some(value) => value.as_str().unwrap_or_default().to_string(),
+            None => return Err(anyhow::anyhow!("Missing 'message' field in request body")),
         };
 
-        // read request body
-        let request_body = match helpers::parse_body(req) {
-            Ok(body) => body,
-            Err(e) => {
-                let response = helpers::build_response_json_error(&e, 400);
-                response.send(resp);
-                return;
-            }
-        };
+        // Build Slack API payload for simple text message and send it
+        let slack_message_payload = SlackMessagePayload::new(message);
+        let slack_response = slack_message_payload
+            .send(&settings.webhook_url)
+            .expect("Failed to send Slack message");
 
-        // parse body to JSON
-        let body_json: serde_json::Value = match serde_json::from_slice(&request_body) {
-            Ok(json) => json,
-            Err(_) => {
-                let response =
-                    helpers::build_response_json_error("Invalid JSON in request body", 400);
-                response.send(resp);
-                return;
-            }
-        };
-
-        // extract message from request body
-        let message = match body_json.get("message") {
-            Some(value) => value.as_str().unwrap_or("").to_string(), // this removes quotes and converts to String
-            None => {
-                let response = helpers::build_response_json_error(
-                    "Missing 'message' field in request body",
-                    400,
-                );
-                response.send(resp);
-                return;
-            }
-        };
-
-        // build Slack API payload for simple text message and send it
-        let slack_message_payload = SlackMessagePayload::new(message.clone());
-        let slack_response = slack_message_payload.send(&settings.webhook_url);
-
-        // handle error in case request couldn't be sent
-        if let Err(e) = slack_response {
-            let response = helpers::build_response_json_error(&e.to_string(), 500);
-            response.send(resp);
-            return;
-        }
-
-        let slack_response = slack_response.unwrap();
         let response_status = slack_response.status_code();
-        let response_body =
-            String::from_utf8_lossy(&slack_response.body().unwrap_or_default()).to_string();
+        let response_body = String::from_utf8_lossy(&slack_response.body()?).to_string();
 
-        let response = helpers::build_response_json(&response_body, response_status);
-        response.send(resp);
+        Ok(http::Response::builder()
+            .header("Content-Type", "application/json")
+            .status(response_status)
+            .body(response_body)?)
     }
 }
 
@@ -89,6 +64,7 @@ impl SlackMessagePayload {
         Self { text }
     }
 
+    #[cfg(not(test))]
     fn send(&self, webhook_url: &str) -> anyhow::Result<Response> {
         let client = waki::Client::new();
         let response = client
@@ -106,44 +82,64 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn from_req(req: &IncomingRequest) -> anyhow::Result<Self> {
-        let map = helpers::parse_headers(&IncomingRequest::headers(req));
-        Self::new(&map)
+    pub fn new(headers: &http::header::HeaderMap) -> anyhow::Result<Self> {
+        let value = headers
+            .get("x-edgee-component-settings")
+            .ok_or_else(|| anyhow::anyhow!("Missing 'x-edgee-component-settings' header"))
+            .and_then(|value| value.to_str().map_err(Into::into))?;
+        let data: HashMap<String, String> = serde_json::from_str(value)?;
+
+        Ok(Self {
+            webhook_url: data
+                .get("webhook_url")
+                .ok_or_else(|| anyhow::anyhow!("Missing webhook_url setting"))?
+                .to_string(),
+        })
     }
 
-    pub fn new(headers: &HashMap<String, Vec<String>>) -> anyhow::Result<Self> {
-        let settings = headers
-            .get("x-edgee-component-settings")
-            .ok_or_else(|| anyhow::anyhow!("Missing 'x-edgee-component-settings' header"))?;
-
-        if settings.len() != 1 {
-            return Err(anyhow::anyhow!(
-                "Expected exactly one 'x-edgee-component-settings' header, found {}",
-                settings.len()
-            ));
-        }
-        let setting = settings[0].clone();
-        let setting: HashMap<String, String> = serde_json::from_str(&setting)?;
-
-        let webhook_url = setting
-            .get("webhook_url")
-            .map(String::to_string)
-            .unwrap_or_default();
-
-        Ok(Self { webhook_url })
+    pub fn from_req<B>(req: &http::Request<B>) -> anyhow::Result<Self> {
+        Self::new(req.headers())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use http::{HeaderValue, Request};
+    use lazy_static;
+    use serde_json::json;
+    use std::sync::Mutex;
+
     use super::*;
+
+    // Patch SlackMessagePayload::send for this test
+    lazy_static::lazy_static! {
+        static ref SEND_CALLED: Mutex<bool> = Mutex::new(false);
+    }
+
+    // Mock SlackMessagePayload::send to avoid real HTTP call
+    pub struct MockResponse;
+    impl MockResponse {
+        pub fn status_code(&self) -> u16 {
+            200
+        }
+        pub fn body(&self) -> anyhow::Result<Vec<u8>> {
+            Ok(b"{\"ok\":true}".to_vec())
+        }
+    }
+
+    impl SlackMessagePayload {
+        pub fn send(&self, _webhook_url: &str) -> anyhow::Result<MockResponse> {
+            *SEND_CALLED.lock().unwrap() = true;
+            Ok(MockResponse)
+        }
+    }
 
     #[test]
     fn test_settings_new() {
-        let mut headers = HashMap::new();
+        let mut headers = http::header::HeaderMap::new();
         headers.insert(
-            "x-edgee-component-settings".to_string(),
-            vec![r#"{"webhook_url": "test_value"}"#.to_string()],
+            "x-edgee-component-settings",
+            HeaderValue::from_static(r#"{"webhook_url": "test_value"}"#),
         );
 
         let settings = Settings::new(&headers).unwrap();
@@ -152,7 +148,7 @@ mod tests {
 
     #[test]
     fn test_settings_new_missing_header() {
-        let headers = HashMap::new();
+        let headers = http::header::HeaderMap::new();
         let result = Settings::new(&headers);
         assert!(result.is_err());
         assert_eq!(
@@ -162,29 +158,11 @@ mod tests {
     }
 
     #[test]
-    fn test_settings_new_multiple_headers() {
-        let mut headers = HashMap::new();
-        headers.insert(
-            "x-edgee-component-settings".to_string(),
-            vec![
-                r#"{"webhook_url": "test_value"}"#.to_string(),
-                r#"{"webhook_url": "another_value"}"#.to_string(),
-            ],
-        );
-        let result = Settings::new(&headers);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Expected exactly one 'x-edgee-component-settings' header"));
-    }
-
-    #[test]
     fn test_settings_new_invalid_json() {
-        let mut headers = HashMap::new();
+        let mut headers = http::header::HeaderMap::new();
         headers.insert(
-            "x-edgee-component-settings".to_string(),
-            vec!["not a json".to_string()],
+            "x-edgee-component-settings",
+            HeaderValue::from_static("not a json"),
         );
         let result = Settings::new(&headers);
         assert!(result.is_err());
@@ -192,13 +170,13 @@ mod tests {
 
     #[test]
     fn test_settings_new_missing_webhook_url() {
-        let mut headers = HashMap::new();
+        let mut headers = http::header::HeaderMap::new();
         headers.insert(
-            "x-edgee-component-settings".to_string(),
-            vec![r#"{"not_webhook_url": "value"}"#.to_string()],
+            "x-edgee-component-settings",
+            HeaderValue::from_static(r#"{"not_webhook_url": "value"}"#),
         );
-        let settings = Settings::new(&headers).unwrap();
-        assert_eq!(settings.webhook_url, "");
+        let result = Settings::new(&headers);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -212,5 +190,64 @@ mod tests {
         let payload = SlackMessagePayload::new("Test message".to_string());
         let json = serde_json::to_string(&payload).unwrap();
         assert_eq!(json, r#"{"text":"Test message"}"#);
+    }
+
+    #[test]
+    fn test_handle_json_request_success() {
+        // Prepare request with headers and body
+        let body = json!({ "message": "Hello, Slack!" });
+        let req = Request::builder()
+            .header(
+                "x-edgee-component-settings",
+                r#"{"webhook_url": "http://example.com/webhook"}"#,
+            )
+            .body(body)
+            .unwrap();
+
+        // Call the handler
+        let result = Component::handle_json_request(req);
+
+        // Assert
+        assert!(result.is_ok());
+        let resp = result.unwrap();
+        assert_eq!(resp.status(), 200);
+        assert_eq!(
+            resp.headers().get("Content-Type").unwrap(),
+            "application/json"
+        );
+        assert_eq!(resp.body(), "{\"ok\":true}");
+        assert!(*SEND_CALLED.lock().unwrap());
+    }
+
+    #[test]
+    fn test_handle_json_request_missing_message() {
+        let body = json!({});
+        let req = Request::builder()
+            .header(
+                "x-edgee-component-settings",
+                r#"{"webhook_url": "http://example.com/webhook"}"#,
+            )
+            .body(body)
+            .unwrap();
+
+        let result = Component::handle_json_request(req);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Missing 'message' field in request body"
+        );
+    }
+
+    #[test]
+    fn test_handle_json_request_invalid_settings() {
+        let body = json!({ "message": "Test" });
+        let req = Request::builder().body(body).unwrap();
+
+        let result = Component::handle_json_request(req);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Missing 'x-edgee-component-settings' header"
+        );
     }
 }
