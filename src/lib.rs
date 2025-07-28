@@ -28,7 +28,7 @@ impl bindings::exports::wasi::http::incoming_handler::Guest for Component {
 impl Component {
     fn handle_json_request(
         req: http::Request<serde_json::Value>,
-    ) -> Result<http::Response<String>, anyhow::Error> {
+    ) -> Result<http::Response<serde_json::Value>, anyhow::Error> {
         let settings = Settings::from_req(&req)?;
 
         // Extract message from request body
@@ -44,13 +44,14 @@ impl Component {
             .send(&settings.webhook_url)
             .expect("Failed to send Slack message");
 
+        // create response body based on Slack response's status code
         let response_status = slack_response.status_code();
-        let response_body = String::from_utf8_lossy(&slack_response.body()?).to_string();
+        let component_response = SlackResponse::from_status(response_status);
 
+        // note: Content-type is already set by helpers::run_json
         Ok(http::Response::builder()
-            .header("Content-Type", "application/json")
             .status(response_status)
-            .body(response_body)?)
+            .body(serde_json::json!(component_response))?)
     }
 }
 
@@ -73,6 +74,17 @@ impl SlackMessagePayload {
             .body(serde_json::to_vec(self)?)
             .send()?;
         Ok(response)
+    }
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct SlackResponse {
+    ok: bool,
+}
+
+impl SlackResponse {
+    fn from_status(status: u16) -> Self {
+        Self { ok: status == 200 }
     }
 }
 
@@ -121,9 +133,6 @@ mod tests {
     impl MockResponse {
         pub fn status_code(&self) -> u16 {
             200
-        }
-        pub fn body(&self) -> anyhow::Result<Vec<u8>> {
-            Ok(b"{\"ok\":true}".to_vec())
         }
     }
 
@@ -211,11 +220,7 @@ mod tests {
         assert!(result.is_ok());
         let resp = result.unwrap();
         assert_eq!(resp.status(), 200);
-        assert_eq!(
-            resp.headers().get("Content-Type").unwrap(),
-            "application/json"
-        );
-        assert_eq!(resp.body(), "{\"ok\":true}");
+        assert_eq!(resp.body().to_string(), "{\"ok\":true}");
         assert!(*SEND_CALLED.lock().unwrap());
     }
 

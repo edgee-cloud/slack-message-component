@@ -49,7 +49,8 @@ await fetch('/slack-message', {
     "message": "hello world!",
   })
 });
-
+const json = await response.json();
+console.log(json.ok); // true
 ```
 
 ## Development
