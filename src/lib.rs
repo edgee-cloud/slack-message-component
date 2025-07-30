@@ -1,8 +1,8 @@
 mod helpers;
 
-use std::collections::HashMap;
-use helpers::body::Json;
 use bindings::wasi::http::types::{IncomingRequest, ResponseOutparam};
+use helpers::body::Json;
+use std::collections::HashMap;
 
 #[cfg(not(test))]
 use waki::Response;
