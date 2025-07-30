@@ -1,5 +1,7 @@
-use std::collections::HashMap;
+mod helpers;
 
+use std::collections::HashMap;
+use helpers::body::Json;
 use bindings::wasi::http::types::{IncomingRequest, ResponseOutparam};
 
 #[cfg(not(test))]
@@ -14,26 +16,25 @@ mod bindings {
         default_bindings_module: "$crate::bindings",
     });
 }
-mod helpers;
 
 struct Component;
 bindings::export!(Component);
 
 impl bindings::exports::wasi::http::incoming_handler::Guest for Component {
     fn handle(req: IncomingRequest, resp: ResponseOutparam) {
-        helpers::run_json(req, resp, Self::handle_json_request);
+        helpers::run(req, resp, Self::handle_json_request);
     }
 }
 
 impl Component {
     fn handle_json_request(
-        req: http::Request<serde_json::Value>,
-    ) -> Result<http::Response<serde_json::Value>, anyhow::Error> {
+        req: http::Request<Json<serde_json::Value>>,
+    ) -> Result<http::Response<Json<serde_json::Value>>, anyhow::Error> {
         let settings = Settings::from_req(&req)?;
 
         // Extract message from request body
-        let request_body = req.body();
-        let message = match request_body.get("message") {
+        let Json(data) = req.body();
+        let message = match data.get("message") {
             Some(value) => value.as_str().unwrap_or_default().to_string(),
             None => return Err(anyhow::anyhow!("Missing 'message' field in request body")),
         };
@@ -51,7 +52,7 @@ impl Component {
         // note: Content-type is already set by helpers::run_json
         Ok(http::Response::builder()
             .status(response_status)
-            .body(serde_json::json!(component_response))?)
+            .body(Json(serde_json::json!(component_response)))?)
     }
 }
 
@@ -210,7 +211,7 @@ mod tests {
                 "x-edgee-component-settings",
                 r#"{"webhook_url": "http://example.com/webhook"}"#,
             )
-            .body(body)
+            .body(Json(body))
             .unwrap();
 
         // Call the handler
@@ -220,7 +221,8 @@ mod tests {
         assert!(result.is_ok());
         let resp = result.unwrap();
         assert_eq!(resp.status(), 200);
-        assert_eq!(resp.body().to_string(), "{\"ok\":true}");
+        let Json(data) = resp.body();
+        assert_eq!(data.to_string(), "{\"ok\":true}");
         assert!(*SEND_CALLED.lock().unwrap());
     }
 
@@ -232,7 +234,7 @@ mod tests {
                 "x-edgee-component-settings",
                 r#"{"webhook_url": "http://example.com/webhook"}"#,
             )
-            .body(body)
+            .body(Json(body))
             .unwrap();
 
         let result = Component::handle_json_request(req);
@@ -246,7 +248,7 @@ mod tests {
     #[test]
     fn test_handle_json_request_invalid_settings() {
         let body = json!({ "message": "Test" });
-        let req = Request::builder().body(body).unwrap();
+        let req = Request::builder().body(Json(body)).unwrap();
 
         let result = Component::handle_json_request(req);
         assert!(result.is_err());
