@@ -25,7 +25,6 @@ impl TryFrom<Method> for http::Method {
     }
 }
 
-
 fn to_http_request_builder(
     scheme: Option<Scheme>,
     authority: Option<String>,
@@ -179,9 +178,7 @@ impl ResponseOutparam {
 
 #[cfg(test)]
 mod tests {
-    use crate::bindings::wasi::http::types::{
-        Method as WasiMethod, Scheme as WasiScheme,
-    };
+    use crate::bindings::wasi::http::types::{Method as WasiMethod, Scheme as WasiScheme};
     use http::Method as HttpMethod;
 
     #[test]
@@ -234,19 +231,20 @@ mod tests {
         let path_and_query = Some("/api/test?foo=bar".to_string());
         let method = WasiMethod::Get;
 
-        let builder = super::to_http_request_builder(
-            scheme,
-            authority,
-            path_and_query,
-            method,
-        )
-        .expect("Should build request");
+        let builder = super::to_http_request_builder(scheme, authority, path_and_query, method)
+            .expect("Should build request");
 
         let req = builder.body(()).unwrap();
         assert_eq!(req.method(), &HttpMethod::GET);
         assert_eq!(req.uri().scheme_str(), Some("https"));
-        assert_eq!(req.uri().authority().map(|a| a.as_str()), Some("example.com"));
-        assert_eq!(req.uri().path_and_query().map(|pq| pq.as_str()), Some("/api/test?foo=bar"));
+        assert_eq!(
+            req.uri().authority().map(|a| a.as_str()),
+            Some("example.com")
+        );
+        assert_eq!(
+            req.uri().path_and_query().map(|pq| pq.as_str()),
+            Some("/api/test?foo=bar")
+        );
     }
 
     #[test]
@@ -256,12 +254,7 @@ mod tests {
         let path_and_query = Some("/".to_string());
         let method = WasiMethod::Get;
 
-        let result = super::to_http_request_builder(
-            scheme,
-            authority,
-            path_and_query,
-            method,
-        );
+        let result = super::to_http_request_builder(scheme, authority, path_and_query, method);
         assert!(result.is_err());
     }
 
@@ -272,12 +265,7 @@ mod tests {
         let path_and_query = Some("/".to_string());
         let method = WasiMethod::Get;
 
-        let result = super::to_http_request_builder(
-            scheme,
-            authority,
-            path_and_query,
-            method,
-        );
+        let result = super::to_http_request_builder(scheme, authority, path_and_query, method);
         assert!(result.is_err());
     }
 
@@ -288,12 +276,7 @@ mod tests {
         let path_and_query = None;
         let method = WasiMethod::Get;
 
-        let result = super::to_http_request_builder(
-            scheme,
-            authority,
-            path_and_query,
-            method,
-        );
+        let result = super::to_http_request_builder(scheme, authority, path_and_query, method);
         assert!(result.is_err());
     }
 }

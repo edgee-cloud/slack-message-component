@@ -104,5 +104,4 @@ mod tests {
         let body_str = std::str::from_utf8(body_bytes).unwrap();
         assert!(body_str.contains("\"error\":\"\""));
     }
-
 }

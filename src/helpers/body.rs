@@ -150,7 +150,6 @@ impl<T: Into<Bytes>> IntoBody for Html<T> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
 
@@ -228,7 +227,9 @@ mod tests {
     #[test]
     fn test_json_from_data_and_into_body() {
         #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
-        struct Test { a: i32 }
+        struct Test {
+            a: i32,
+        }
         let obj = Test { a: 42 };
         let json_bytes = serde_json::to_vec(&obj).unwrap();
         let json = Json::<Test>::from_data(Bytes::from(json_bytes)).unwrap();
@@ -256,7 +257,9 @@ mod tests {
     #[test]
     fn test_json_extend_response_parts_sets_content_type() {
         #[derive(serde::Serialize)]
-        struct Dummy { x: i32 }
+        struct Dummy {
+            x: i32,
+        }
         let json = Json(Dummy { x: 1 });
         let (mut parts, _) = http::response::Response::new("ok").into_parts();
         json.extend_response_parts(&mut parts);
@@ -285,7 +288,9 @@ mod tests {
     #[test]
     fn test_option_extend_response_parts_some() {
         #[derive(serde::Serialize)]
-        struct Dummy { x: i32 }
+        struct Dummy {
+            x: i32,
+        }
         let json = Some(Json(Dummy { x: 2 }));
         let (mut parts, _) = http::response::Response::new("ok").into_parts();
         json.extend_response_parts(&mut parts);
@@ -327,10 +332,15 @@ mod tests {
     #[test]
     fn test_json_extend_response_parts_doesnt_overwrite_existing_content_type() {
         #[derive(serde::Serialize)]
-        struct Dummy { x: i32 }
+        struct Dummy {
+            x: i32,
+        }
         let json = Json(Dummy { x: 1 });
         let (mut parts, _) = http::response::Response::new("ok").into_parts();
-        parts.headers.insert(http::header::CONTENT_TYPE, http::HeaderValue::from_static("text/plain"));
+        parts.headers.insert(
+            http::header::CONTENT_TYPE,
+            http::HeaderValue::from_static("text/plain"),
+        );
         json.extend_response_parts(&mut parts);
         let content_type = parts.headers.get(http::header::CONTENT_TYPE).unwrap();
         // Should remain as "text/plain" since or_insert does not overwrite
@@ -341,7 +351,10 @@ mod tests {
     fn test_html_extend_response_parts_doesnt_overwrites_existing_content_type() {
         let html = Html(Bytes::from("<p>test</p>"));
         let (mut parts, _) = http::response::Response::new("ok").into_parts();
-        parts.headers.insert(http::header::CONTENT_TYPE, http::HeaderValue::from_static("application/json"));
+        parts.headers.insert(
+            http::header::CONTENT_TYPE,
+            http::HeaderValue::from_static("application/json"),
+        );
         html.extend_response_parts(&mut parts);
         let content_type = parts.headers.get(http::header::CONTENT_TYPE).unwrap();
         // Should remain as "application/json" since or_insert does not overwrite
@@ -351,7 +364,9 @@ mod tests {
     #[test]
     fn test_json_extend_response_parts_adds_content_type() {
         #[derive(serde::Serialize)]
-        struct Dummy { x: i32 }
+        struct Dummy {
+            x: i32,
+        }
         let json = Json(Dummy { x: 1 });
         let (mut parts, _) = http::response::Response::new("ok").into_parts();
         json.extend_response_parts(&mut parts);
@@ -369,7 +384,4 @@ mod tests {
         // Should remain as "application/json" since or_insert does not overwrite
         assert_eq!(content_type, "text/html; charset=utf-8");
     }
-
-
-
 }
