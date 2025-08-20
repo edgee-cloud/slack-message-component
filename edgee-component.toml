@@ -6,7 +6,45 @@ version = "1.0.0"
 
 category = "edge-function"
 subcategory = "wasm-function"
-description = "Edge function component to send Slack messages."
+description = """
+## Overview
+
+The **Slack Message** component by Edgee enables seamless integration of Slack messaging into your Edgee projects.
+This component allows you to send messages to Slack channels directly from the edge, powered by edge functions.
+It accepts HTTP POST requests with a message and forwards it directly to your configured Slack webhook, making it easy to send notifications from your applications to Slack channels.
+
+---
+
+## Key Features & Benefits
+
+### Features
+
+- **Simple Message Forwarding**: Accepts messages via HTTP POST and sends them to Slack.
+- **Webhook Integration**: Uses Slack incoming webhooks for reliable message delivery.
+- **Edge Performance**: Fast message processing directly at the edge.
+- **Easy Configuration**: Just provide your Slack webhook URL and endpoint path.
+- **Real-Time Notifications**: Send instant alerts to your team.
+
+### Benefits
+
+- **Enhanced UX**: Delivers real-time communication with your team.
+- **Low Latency**: Sends messages quickly by processing at the edge.
+- **Simple Setup**: Quick to configure within your Edgee project.
+- **Scalable**: Efficiently handles high message volumes.
+
+---
+
+## Use Cases
+
+- **Support Alerts**: Notify teams instantly when users submit a support request.
+- **Monitoring**: Send error logs or system alerts directly to a Slack channel.
+- **Lead Notifications**: Alert sales teams in real time with new signup or action notifications.
+- **Workflow Integration**: Seamlessly connect Slack messaging with your internal processes.
+
+---
+
+Additional resources: [Slack Webhook Documentation](https://api.slack.com/messaging/webhooks)
+"""
 documentation = "https://www.edgee.cloud/docs/components/edge-functions/sendgrid"
 repository = "https://github.com/edgee-cloud/slack-message-component"
 language = "Rust"
