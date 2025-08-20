@@ -7,10 +7,6 @@ version = "1.0.0"
 category = "edge-function"
 subcategory = "wasm-function"
 description = """
-# Slack Message Component
-
-[https://www.edgee.cloud/edgee/slack-message](https://www.edgee.cloud/edgee/slack-message)
-
 ## Overview
 
 The **Slack Message** component by Edgee enables seamless integration of Slack messaging into your Edgee projects.
